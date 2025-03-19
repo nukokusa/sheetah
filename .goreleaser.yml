@@ -7,6 +7,9 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/sheetah/main.go
     binary: sheetah
+    ldflags:
+      - -s -w
+      - -X main.Version=v{{.Version}}
     goos:
       - linux
       - darwin
