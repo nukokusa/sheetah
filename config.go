@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/goccy/go-yaml"
-	"github.com/samber/lo"
 )
 
 func LoadConfig(path string) (*Config, error) {
@@ -65,12 +64,6 @@ func (sc *SheetConfig) Validate() error {
 		if err := cc.Validate(); err != nil {
 			return err
 		}
-	}
-
-	if _, ok := lo.Find(sc.Columns, func(cc *ColumnConfig) bool {
-		return cc.Name == sheetIDColumn
-	}); !ok {
-		return errors.New("column id is required")
 	}
 
 	return nil

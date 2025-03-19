@@ -12,8 +12,6 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-const sheetIDColumn = "id"
-
 type Sheet struct {
 	SpreadsheetID string
 	Config        *SheetConfig
@@ -46,9 +44,13 @@ func NewSheets(spreadsheetID string, configs []*SheetConfig, spreadsheet *sheets
 		return s.Properties.Title, s
 	})
 
-	isColumnRow := func(row *sheets.RowData) bool {
+	isColumnRow := func(row *sheets.RowData, config *SheetConfig) bool {
+		columnMap := lo.SliceToMap(config.Columns, func(c *ColumnConfig) (string, ColumnType) {
+			return c.Name, c.Type
+		})
 		_, exist := lo.Find(row.Values, func(cell *sheets.CellData) bool {
-			return cell.FormattedValue == sheetIDColumn
+			_, ok := columnMap[cell.FormattedValue]
+			return ok
 		})
 		return exist
 	}
@@ -69,7 +71,7 @@ func NewSheets(spreadsheetID string, configs []*SheetConfig, spreadsheet *sheets
 		for _, d := range data {
 			for _, row := range d.RowData {
 				if columns == nil {
-					if isColumnRow(row) {
+					if isColumnRow(row, config) {
 						columns = row.Values
 					}
 					continue
