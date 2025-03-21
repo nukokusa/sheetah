@@ -53,7 +53,10 @@ var (
 func (f *fetcher) FetchSheets(ctx context.Context, spreadsheetID string, configs []*SheetConfig) ([]*Sheet, error) {
 	req := f.ss.Spreadsheets.Get(spreadsheetID).IncludeGridData(true)
 	ranges := lo.Map(configs, func(config *SheetConfig, _ int) string {
-		return config.Name
+		if config.Range == "" {
+			return config.Name
+		}
+		return config.Name + "!" + config.Range
 	})
 	req.Ranges(ranges...)
 	req.Fields(fields...)

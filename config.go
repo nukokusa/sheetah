@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 
 	"github.com/goccy/go-yaml"
 )
@@ -53,10 +54,24 @@ func (c *Config) Validate() error {
 
 type SheetConfig struct {
 	Name    string          `yaml:"name"`
+	Range   string          `yaml:"range,omitempty"`
 	Columns []*ColumnConfig `yaml:"columns"`
 }
 
+var (
+	a1Regex   = regexp.MustCompile(`^([A-Z]+[0-9]+)(:[A-Z]+[0-9]+)?$`)
+	r1c1Regex = regexp.MustCompile(`^(R[0-9]+C[0-9]+)(:R[0-9]+C[0-9]+)?$`)
+)
+
 func (sc *SheetConfig) Validate() error {
+	if sc.Name == "" {
+		return errors.New("name is empty")
+	}
+	if sc.Range != "" {
+		if !a1Regex.MatchString(sc.Range) && !r1c1Regex.MatchString(sc.Range) {
+			return fmt.Errorf("invalid range format: %s", sc.Range)
+		}
+	}
 	if len(sc.Columns) == 0 {
 		return errors.New("columns is empty")
 	}
