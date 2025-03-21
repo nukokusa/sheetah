@@ -1,0 +1,5 @@
+registries:
+- type: standard
+  ref: v4.331.0 # renovate: depName=aquaproj/aqua-registry
+packages:
+- name: go-task/task@v3.42.1
