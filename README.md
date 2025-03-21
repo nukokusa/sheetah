@@ -4,7 +4,7 @@ sheetah is a tool for exporting data from Google Sheets.
 
 ## Usage
 
-```sh
+```
 Usage: sheetah <command> [flags]
 
 Flags:
