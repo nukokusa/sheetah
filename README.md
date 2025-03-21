@@ -28,6 +28,7 @@ Configuration file is YAML format. Describe the structure of the table.
 ```yaml
 sheets:
   - name: weapon
+    range: A1:D10
     columns:
       - name: id
         type: number
