@@ -2,10 +2,10 @@ package sheetah_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/nukokusa/sheetah"
-	"google.golang.org/api/sheets/v4"
 )
 
 func AssertDiff(t *testing.T, expected, actual any, opts ...cmp.Option) {
@@ -16,252 +16,206 @@ func AssertDiff(t *testing.T, expected, actual any, opts ...cmp.Option) {
 	}
 }
 
-func TestCell_number(t *testing.T) {
+func TestStringCell_Value(t *testing.T) {
 	t.Parallel()
+
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name     string
-		cell     *sheetah.Cell
+		str      string
+		typ      sheetah.ColumnType
 		expected any
 	}{
 		{
-			name: "FormatType: Unspecified",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					UserEnteredFormat: &sheets.CellFormat{
-						NumberFormat: &sheets.NumberFormat{
-							Type: string(sheetah.CellNumberFormatTypeUnspecified),
-						},
-					},
-					EffectiveValue: &sheets.ExtendedValue{
-						NumberValue: func() *float64 {
-							f := float64(12.3)
-							return &f
-						}(),
-					},
-				},
-			},
+			name:     "string",
+			str:      "sheetah",
+			typ:      sheetah.ColumnTypeString,
+			expected: "sheetah",
+		},
+		{
+			name:     "number",
+			str:      "12.3",
+			typ:      sheetah.ColumnTypeNumber,
 			expected: float64(12.3),
 		},
 		{
-			name: "FormatType: Unspecified, integer",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					UserEnteredFormat: &sheets.CellFormat{
-						NumberFormat: &sheets.NumberFormat{
-							Type: string(sheetah.CellNumberFormatTypeUnspecified),
-						},
-					},
-					EffectiveValue: &sheets.ExtendedValue{
-						NumberValue: func() *float64 {
-							f := float64(12.0)
-							return &f
-						}(),
-					},
-				},
-			},
+			name:     "number: integer",
+			str:      "12.0",
+			typ:      sheetah.ColumnTypeNumber,
 			expected: int64(12),
 		},
 		{
-			name: "FormatType: Percent",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					UserEnteredFormat: &sheets.CellFormat{
-						NumberFormat: &sheets.NumberFormat{
-							Type: string(sheetah.CellNumberFormatTypePercent),
-						},
-					},
-					EffectiveValue: &sheets.ExtendedValue{
-						NumberValue: func() *float64 {
-							f := float64(0.123)
-							return &f
-						}(),
-					},
-				},
-			},
-			expected: float64(12.3),
-		},
-		{
-			name: "FormatType: Date",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					UserEnteredFormat: &sheets.CellFormat{
-						NumberFormat: &sheets.NumberFormat{
-							Type: string(sheetah.CellNumberFormatTypeDate),
-						},
-					},
-					EffectiveValue: &sheets.ExtendedValue{
-						NumberValue: func() *float64 {
-							f := float64(36526) // 2000/01/01
-							return &f
-						}(),
-					},
-				},
-			},
+			name:     "number: invalid",
+			str:      "hello",
+			typ:      sheetah.ColumnTypeNumber,
 			expected: nil,
 		},
 		{
-			name: "StringValue",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						StringValue: func() *string {
-							s := "12.3"
-							return &s
-						}(),
-					},
-				},
-			},
-			expected: float64(12.3),
+			name:     "boolean: true",
+			str:      "true",
+			typ:      sheetah.ColumnTypeBool,
+			expected: true,
 		},
 		{
-			name: "StringValue, integer",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						StringValue: func() *string {
-							s := "12.0"
-							return &s
-						}(),
-					},
-				},
-			},
-			expected: int64(12),
+			name:     "boolean: false",
+			str:      "false",
+			typ:      sheetah.ColumnTypeBool,
+			expected: false,
 		},
 		{
-			name: "failed to parse number",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						ErrorValue: &sheets.ErrorValue{
-							Message: "dummy message",
-							Type:    "ERROR",
-						},
-					},
-				},
-			},
-			expected: nil,
+			name:     "timestamp",
+			str:      "2000/01/02 3:04:05",
+			typ:      sheetah.ColumnTypeTimestamp,
+			expected: time.Date(2000, 1, 2, 3, 4, 5, 0, loc),
+		},
+		{
+			name:     "timestamp: timezone",
+			str:      "2000/01/02 3:04:05Z", // UTC
+			typ:      sheetah.ColumnTypeTimestamp,
+			expected: time.Date(2000, 1, 2, 3, 4, 5, 0, time.UTC),
+		},
+		{
+			name:     "timestamp: date",
+			str:      "2000/01/02",
+			typ:      sheetah.ColumnTypeTimestamp,
+			expected: time.Date(2000, 1, 2, 0, 0, 0, 0, loc),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sheetah.CellNumber(tt.cell)
+			result := sheetah.NewStringCell(tt.str, loc).Value(tt.typ)
 			AssertDiff(t, tt.expected, result)
 		})
 	}
 }
 
-func TestCell_bool(t *testing.T) {
+func TestNumberCell_Value(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
-		cell     *sheetah.Cell
+		cell     sheetah.NumberCell
+		typ      sheetah.ColumnType
 		expected any
 	}{
 		{
-			name: "BoolValue: true",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						BoolValue: func() *bool {
-							b := true
-							return &b
-						}(),
-					},
-				},
-			},
-			expected: true,
+			name:     "number",
+			cell:     12.3,
+			typ:      sheetah.ColumnTypeNumber,
+			expected: float64(12.3),
 		},
 		{
-			name: "BoolValue: false",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						BoolValue: func() *bool {
-							b := false
-							return &b
-						}(),
-					},
-				},
-			},
+			name:     "number: integer",
+			cell:     12.0,
+			typ:      sheetah.ColumnTypeNumber,
+			expected: int64(12),
+		},
+		{
+			name:     "string",
+			cell:     12.3,
+			typ:      sheetah.ColumnTypeString,
+			expected: "12.3",
+		},
+		{
+			name:     "string: integer",
+			cell:     12.0,
+			typ:      sheetah.ColumnTypeString,
+			expected: "12",
+		},
+		{
+			name:     "boolean: zero",
+			cell:     0.0,
+			typ:      sheetah.ColumnTypeBool,
 			expected: false,
 		},
 		{
-			name: "NumberValue: zero",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						NumberValue: func() *float64 {
-							f := float64(0)
-							return &f
-						}(),
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "NumberValue: non-zero",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						NumberValue: func() *float64 {
-							f := float64(1)
-							return &f
-						}(),
-					},
-				},
-			},
+			name:     "boolean: non-zero",
+			cell:     1.0,
+			typ:      sheetah.ColumnTypeBool,
 			expected: true,
 		},
 		{
-			name: "StringValue: TRUE",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						StringValue: func() *string {
-							s := "TRUE"
-							return &s
-						}(),
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "StringValue: FALSE",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						StringValue: func() *string {
-							s := "FALSE"
-							return &s
-						}(),
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "failed to parse boolean",
-			cell: &sheetah.Cell{
-				CellData: &sheets.CellData{
-					EffectiveValue: &sheets.ExtendedValue{
-						ErrorValue: &sheets.ErrorValue{
-							Message: "dummy message",
-							Type:    "ERROR",
-						},
-					},
-				},
-			},
+			name:     "invalid type",
+			cell:     12.3,
+			typ:      sheetah.ColumnTypeTimestamp,
 			expected: nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sheetah.CellBool(tt.cell)
+			result := tt.cell.Value(tt.typ)
 			AssertDiff(t, tt.expected, result)
 		})
 	}
+}
+
+func TestBoolCell_Value(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		cell     sheetah.BoolCell
+		typ      sheetah.ColumnType
+		expected any
+	}{
+		{
+			name:     "boolean: true",
+			cell:     true,
+			typ:      sheetah.ColumnTypeBool,
+			expected: true,
+		},
+		{
+			name:     "boolean: false",
+			cell:     false,
+			typ:      sheetah.ColumnTypeBool,
+			expected: false,
+		},
+		{
+			name:     "string: true",
+			cell:     true,
+			typ:      sheetah.ColumnTypeString,
+			expected: "true",
+		},
+		{
+			name:     "string: false",
+			cell:     false,
+			typ:      sheetah.ColumnTypeString,
+			expected: "false",
+		},
+		{
+			name:     "number: true",
+			cell:     true,
+			typ:      sheetah.ColumnTypeNumber,
+			expected: int64(1),
+		},
+		{
+			name:     "number: false",
+			cell:     false,
+			typ:      sheetah.ColumnTypeNumber,
+			expected: int64(0),
+		},
+		{
+			name:     "invalid type",
+			cell:     true,
+			typ:      sheetah.ColumnTypeTimestamp,
+			expected: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.cell.Value(tt.typ)
+			AssertDiff(t, tt.expected, result)
+		})
+	}
+}
+
+func TestNilCell_Value(t *testing.T) {
+	t.Parallel()
+
+	result := sheetah.NilCell{}.Value(sheetah.ColumnTypeString)
+	AssertDiff(t, nil, result)
 }

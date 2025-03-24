@@ -4,7 +4,7 @@ sheetah is a tool for exporting data from Google Sheets.
 
 ## Usage
 
-```sh
+```
 Usage: sheetah <command> [flags]
 
 Flags:
@@ -28,6 +28,7 @@ Configuration file is YAML format. Describe the structure of the table.
 ```yaml
 sheets:
   - name: weapon
+    range: A1:D10
     columns:
       - name: id
         type: number
@@ -52,6 +53,8 @@ The `type` specifies the data type of the column. The following types can be use
 - string
 - boolean
 - timestamp
+
+When using `timestamp`, if the timezone is not specified in the sheet value, the spreadsheet settings will be used.
 
 If the sheet value does not match the type, it will not be output.
 

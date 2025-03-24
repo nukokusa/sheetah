@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-yaml"
@@ -15,20 +16,12 @@ import (
 type Sheet struct {
 	SpreadsheetID string
 	Config        *SheetConfig
-	Columns       []*sheets.CellData
-	Rows          [][]*Cell
+	Columns       []string
+	Rows          [][]Cell
 }
 
-func NewSheet(spreadsheetID string, config *SheetConfig, spreadsheet *sheets.Spreadsheet) (*Sheet, error) {
-	shs, err := NewSheets(spreadsheetID, []*SheetConfig{config}, spreadsheet)
-	if err != nil {
-		return nil, err
-	}
-	return shs[0], nil
-}
-
-func NewSheets(spreadsheetID string, configs []*SheetConfig, spreadsheet *sheets.Spreadsheet) ([]*Sheet, error) {
-	if len(spreadsheet.Sheets) == 0 {
+func NewSheets(spreadsheetID string, configs []*SheetConfig, spreadsheet *sheets.Spreadsheet, valueRanges []*sheets.ValueRange) ([]*Sheet, error) {
+	if len(valueRanges) == 0 {
 		return nil, errors.New("sheet not found")
 	}
 
@@ -40,16 +33,31 @@ func NewSheets(spreadsheetID string, configs []*SheetConfig, spreadsheet *sheets
 			return nil, err
 		}
 	}
-	sheetsByName := lo.SliceToMap(spreadsheet.Sheets, func(s *sheets.Sheet) (string, *sheets.Sheet) {
-		return s.Properties.Title, s
+
+	sheetsByName := lo.SliceToMap(valueRanges, func(vr *sheets.ValueRange) (string, *sheets.ValueRange) {
+		parts := strings.SplitN(vr.Range, "!", 2)
+		return parts[0], vr
 	})
 
-	isColumnRow := func(row *sheets.RowData, config *SheetConfig) bool {
+	formatString := func(cell any) string {
+		switch _c := cell.(type) {
+		case string:
+			return _c
+		case float64:
+			return strconv.FormatFloat(_c, 'f', -1, 64)
+		case bool:
+			return strconv.FormatBool(_c)
+		default:
+			return ""
+		}
+	}
+
+	isColumnRow := func(row []any, config *SheetConfig) bool {
 		columnMap := lo.SliceToMap(config.Columns, func(c *ColumnConfig) (string, ColumnType) {
 			return c.Name, c.Type
 		})
-		_, exist := lo.Find(row.Values, func(cell *sheets.CellData) bool {
-			_, ok := columnMap[cell.FormattedValue]
+		_, exist := lo.Find(row, func(cell any) bool {
+			_, ok := columnMap[formatString(cell)]
 			return ok
 		})
 		return exist
@@ -61,25 +69,30 @@ func NewSheets(spreadsheetID string, configs []*SheetConfig, spreadsheet *sheets
 		if !ok {
 			return nil, fmt.Errorf("sheet not found: %s", config.Name)
 		}
-		data := sheet.Data
-		sort.Slice(data, func(i, j int) bool {
-			return data[i].StartRow < data[j].StartRow
-		})
 
-		var columns []*sheets.CellData
-		rows := [][]*Cell{}
-		for _, d := range data {
-			for _, row := range d.RowData {
-				if columns == nil {
-					if isColumnRow(row, config) {
-						columns = row.Values
-					}
-					continue
+		var columns []string
+		rows := [][]Cell{}
+		for _, row := range sheet.Values {
+			if columns == nil {
+				if isColumnRow(row, config) {
+					columns = lo.Map(row, func(cell any, _ int) string {
+						return formatString(cell)
+					})
 				}
-				rows = append(rows, lo.Map(row.Values, func(cell *sheets.CellData, _ int) *Cell {
-					return &Cell{cell, loc}
-				}))
+				continue
 			}
+			rows = append(rows, lo.Map(row, func(cell any, _ int) Cell {
+				switch c := cell.(type) {
+				case string:
+					return NewStringCell(c, loc)
+				case float64:
+					return NumberCell(c)
+				case bool:
+					return BoolCell(c)
+				default:
+					return NilCell{}
+				}
+			}))
 		}
 		if columns == nil {
 			return nil, fmt.Errorf("columns not found: %s", config.Name)
@@ -106,8 +119,8 @@ func (s Sheet) marshal() []map[string]any {
 	})
 
 	headers := make(map[int]string)
-	for i, cell := range s.Columns {
-		headers[i] = cell.FormattedValue
+	for i, column := range s.Columns {
+		headers[i] = column
 	}
 
 	var result []map[string]any

@@ -43,7 +43,7 @@ func (c *CLI) runExport(ctx context.Context, opt *ExportOption) error {
 	case "json":
 		o = &JSONOutputter{}
 	default:
-		o = &YAMLOutputter{}
+		return fmt.Errorf("invalid format: %s", opt.Format)
 	}
 
 	if err := o.Output(ctx, opt.Dir, sheets...); err != nil {
