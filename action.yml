@@ -1,0 +1,37 @@
+inputs:
+  version:
+    description: "A version to install sheetah"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Set sheetah version
+      id: set-sheetah-version
+      run: |
+        VERSION=${{ inputs.version }}
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+      shell: bash
+    - name: Set file name
+      id: set-filename
+      run: |
+        case "${{ runner.os }}" in
+          Linux) BIN_OS="linux" ;;
+          macOS) BIN_OS="darwin" ;;
+          *) BIN_OS="linux" ;;
+        esac
+
+        case "${{ runner.arch }}" in
+          X64) BIN_ARCH="amd64" ;;
+          ARM64) BIN_ARCH="arm64" ;;
+          *) BIN_ARCH="amd64" ;;
+        esac
+
+        FILENAME=sheetah_${{ steps.set-sheetah-version.outputs.VERSION }}_${BIN_OS}_${BIN_ARCH}.tar.gz
+        echo "FILENAME=$FILENAME" >> $GITHUB_OUTPUT
+      shell: bash
+    - run: |
+        mkdir -p /tmp/sheetah-${{ steps.set-sheetah-version.outputs.VERSION }}
+        cd /tmp/sheetah-${{ steps.set-sheetah-version.outputs.VERSION }}
+        curl -sL https://github.com/nukokusa/sheetah/releases/download/${{ steps.set-sheetah-version.outputs.VERSION }}/${{ steps.set-filename.outputs.FILENAME }} | tar zxvf -
+        sudo install sheetah /usr/local/bin
+      shell: bash
