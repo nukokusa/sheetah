@@ -54,6 +54,8 @@ The `type` specifies the data type of the column. The following types can be use
 - boolean
 - timestamp
 
+When using `timestamp`, if the timezone is not specified in the sheet value, the spreadsheet settings will be used.
+
 If the sheet value does not match the type, it will not be output.
 
 ## Author

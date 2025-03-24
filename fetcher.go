@@ -13,15 +13,17 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-type Fetcher interface {
-	FetchSheets(ctx context.Context, spreadsheetID string, configs []*SheetConfig) ([]*Sheet, error)
+var retryPolicy = retry.Policy{
+	MinDelay: time.Second,
+	MaxDelay: 100 * time.Second,
+	MaxCount: 10,
 }
 
-type fetcher struct {
+type Fetcher struct {
 	ss *sheets.Service
 }
 
-func NewFetcher(ctx context.Context, credentials string) (Fetcher, error) {
+func NewFetcher(ctx context.Context, credentials string) (*Fetcher, error) {
 	sheetsService, err := sheets.NewService(ctx,
 		option.WithCredentialsFile(credentials),
 		option.WithScopes(sheets.SpreadsheetsScope),
@@ -30,37 +32,15 @@ func NewFetcher(ctx context.Context, credentials string) (Fetcher, error) {
 		return nil, err
 	}
 
-	return &fetcher{
+	return &Fetcher{
 		ss: sheetsService,
 	}, nil
 }
 
-var (
-	retryPolicy = retry.Policy{
-		MinDelay: time.Second,
-		MaxDelay: 100 * time.Second,
-		MaxCount: 10,
-	}
-	fields = []googleapi.Field{
-		"properties.timeZone",
-		"sheets.properties.title",
-		"sheets.data.rowData.values.userEnteredFormat.numberFormat.type",
-		"sheets.data.rowData.values.formattedValue",
-		"sheets.data.rowData.values.effectiveValue",
-	}
-)
-
-func (f *fetcher) FetchSheets(ctx context.Context, spreadsheetID string, configs []*SheetConfig) ([]*Sheet, error) {
-	req := f.ss.Spreadsheets.Get(spreadsheetID).IncludeGridData(true)
-	ranges := lo.Map(configs, func(config *SheetConfig, _ int) string {
-		if config.Range == "" {
-			return config.Name
-		}
-		return config.Name + "!" + config.Range
-	})
-	req.Ranges(ranges...)
-	req.Fields(fields...)
+func (f *Fetcher) FetchSheets(ctx context.Context, spreadsheetID string, configs []*SheetConfig) ([]*Sheet, error) {
 	retrier := retryPolicy.Start(ctx)
+
+	req := f.ss.Spreadsheets.Get(spreadsheetID).Fields("properties.timeZone")
 	var resp *sheets.Spreadsheet
 	for retrier.Continue() {
 		var err error
@@ -77,5 +57,33 @@ func (f *fetcher) FetchSheets(ctx context.Context, spreadsheetID string, configs
 		}
 		return nil, err
 	}
-	return NewSheets(spreadsheetID, configs, resp)
+
+	batchReq := f.ss.Spreadsheets.Values.BatchGet(spreadsheetID)
+	ranges := lo.Map(configs, func(config *SheetConfig, _ int) string {
+		if config.Range == "" {
+			return config.Name
+		}
+		return config.Name + "!" + config.Range
+	})
+	batchReq.Ranges(ranges...)
+	batchReq.ValueRenderOption("UNFORMATTED_VALUE")
+	batchReq.DateTimeRenderOption("FORMATTED_STRING")
+	var batchResp *sheets.BatchGetValuesResponse
+	for retrier.Continue() {
+		var err error
+		batchResp, err = batchReq.Context(ctx).Do()
+		if err == nil {
+			break
+		}
+		if apiError, ok := err.(*googleapi.Error); ok {
+			if apiError.Code == http.StatusTooManyRequests {
+				slog.Warn("Rate limit exceeded, retrying...", "error", err)
+				continue
+			}
+			return nil, err
+		}
+		return nil, err
+	}
+
+	return NewSheets(spreadsheetID, configs, resp, batchResp.ValueRanges)
 }

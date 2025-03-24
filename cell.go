@@ -1,143 +1,93 @@
 package sheetah
 
 import (
-	"log/slog"
 	"math"
 	"strconv"
 	"time"
-
-	"google.golang.org/api/sheets/v4"
 )
 
-type Cell struct {
-	*sheets.CellData
-	Loc *time.Location
+type Cell interface {
+	Value(typ ColumnType) any
 }
 
-func (c *Cell) Value(typ ColumnType) any {
+type StringCell struct {
+	str string
+	loc *time.Location
+}
+
+func NewStringCell(str string, loc *time.Location) *StringCell {
+	return &StringCell{str, loc}
+}
+
+func (c *StringCell) Value(typ ColumnType) any {
 	switch typ {
 	case ColumnTypeString:
-		return c.string()
+		return c.str
 	case ColumnTypeNumber:
-		return c.number()
+		if num, err := strconv.ParseFloat(c.str, 64); err == nil {
+			return formatFloat(num)
+		}
+		return nil
 	case ColumnTypeBool:
-		return c.bool()
+		if b, err := strconv.ParseBool(c.str); err == nil {
+			return b
+		}
+		return nil
 	case ColumnTypeTimestamp:
-		return c.timestamp()
+		if t, err := ParseTimeByString(c.str, c.loc); err == nil {
+			return t
+		}
+		return nil
 	default:
-		return c.CellData.FormattedValue
+		return nil
 	}
 }
 
-func (c *Cell) string() string {
-	return c.CellData.FormattedValue
+type NumberCell float64
+
+func (c NumberCell) Value(typ ColumnType) any {
+	switch typ {
+	case ColumnTypeNumber:
+		return formatFloat(float64(c))
+	case ColumnTypeString:
+		return strconv.FormatFloat(float64(c), 'f', -1, 64)
+	case ColumnTypeBool:
+		if c != 0 {
+			return true
+		}
+		return false
+	default:
+		return nil
+	}
 }
 
-func (c *Cell) number() any {
-	floor := func(num float64) any {
-		if math.Floor(num) == num {
-			return int64(num)
+type BoolCell bool
+
+func (c BoolCell) Value(typ ColumnType) any {
+	switch typ {
+	case ColumnTypeBool:
+		return bool(c)
+	case ColumnTypeString:
+		return strconv.FormatBool(bool(c))
+	case ColumnTypeNumber:
+		if bool(c) {
+			return int64(1)
 		}
-		return num
+		return int64(0)
+	default:
+		return nil
 	}
+}
 
-	if c.CellData.EffectiveValue != nil {
-		if c.CellData.EffectiveValue.NumberValue != nil {
-			formatType := CellNumberFormatTypeUnspecified
-			if c.CellData.UserEnteredFormat != nil && c.CellData.UserEnteredFormat.NumberFormat != nil {
-				formatType = CellNumberFormatType(c.CellData.UserEnteredFormat.NumberFormat.Type)
-			}
+type NilCell struct{}
 
-			switch formatType {
-			case CellNumberFormatTypeUnspecified,
-				CellNumberFormatTypeText,
-				CellNumberFormatTypeNumber,
-				CellNumberFormatTypeCurrency,
-				CellNumberFormatTypeScientific:
-				return floor(*c.CellData.EffectiveValue.NumberValue)
-			case CellNumberFormatTypePercent:
-				return floor(*c.CellData.EffectiveValue.NumberValue * 100)
-			case CellNumberFormatTypeDate,
-				CellNumberFormatTypeTime,
-				CellNumberFormatTypeDateTime:
-				// not supported format
-			}
-		}
-		if c.CellData.EffectiveValue.StringValue != nil {
-			if num, err := strconv.ParseFloat(*c.CellData.EffectiveValue.StringValue, 64); err == nil {
-				return floor(num)
-			}
-		}
-	}
-
-	slog.Warn("Failed to parse number", "value", c.CellData.FormattedValue)
+func (c NilCell) Value(typ ColumnType) any {
 	return nil
 }
 
-func (c *Cell) bool() any {
-	if c.CellData.EffectiveValue != nil {
-		switch {
-		case c.CellData.EffectiveValue.BoolValue != nil:
-			return *c.CellData.EffectiveValue.BoolValue
-		case c.CellData.EffectiveValue.NumberValue != nil:
-			return *c.CellData.EffectiveValue.NumberValue != 0
-		case c.CellData.EffectiveValue.StringValue != nil:
-			if b, err := strconv.ParseBool(*c.CellData.EffectiveValue.StringValue); err == nil {
-				return b
-			}
-		}
+func formatFloat(v float64) any {
+	if num := math.Trunc(v); num == v {
+		return int64(num)
 	}
-
-	slog.Warn("Failed to parse boolean", "value", c.CellData.FormattedValue)
-	return nil
+	return v
 }
-
-func (c *Cell) timestamp() any {
-	if c.CellData.EffectiveValue != nil {
-		if c.CellData.EffectiveValue.NumberValue != nil {
-			formatType := CellNumberFormatTypeUnspecified
-			if c.CellData.UserEnteredFormat != nil && c.CellData.UserEnteredFormat.NumberFormat != nil {
-				formatType = CellNumberFormatType(c.CellData.UserEnteredFormat.NumberFormat.Type)
-			}
-
-			switch formatType {
-			case CellNumberFormatTypeUnspecified,
-				CellNumberFormatTypeText:
-				if t, err := ParseTimeByString(c.CellData.FormattedValue, c.Loc); err == nil {
-					return t
-				}
-			case CellNumberFormatTypeDate,
-				CellNumberFormatTypeDateTime:
-				return ParseTimeBySerialNumber(*c.CellData.EffectiveValue.NumberValue, c.Loc)
-			case CellNumberFormatTypeNumber,
-				CellNumberFormatTypePercent,
-				CellNumberFormatTypeCurrency,
-				CellNumberFormatTypeScientific,
-				CellNumberFormatTypeTime:
-				// not supported format
-			}
-		}
-		if c.CellData.EffectiveValue.StringValue != nil {
-			if t, err := ParseTimeByString(c.CellData.FormattedValue, c.Loc); err == nil {
-				return t
-			}
-		}
-	}
-
-	slog.Warn("Failed to parse timestamp", "value", c.CellData.FormattedValue)
-	return nil
-}
-
-type CellNumberFormatType string
-
-const (
-	CellNumberFormatTypeUnspecified CellNumberFormatType = "NUMBER_FORMAT_TYPE_UNSPECIFIED"
-	CellNumberFormatTypeText        CellNumberFormatType = "TEXT"
-	CellNumberFormatTypeNumber      CellNumberFormatType = "NUMBER"
-	CellNumberFormatTypePercent     CellNumberFormatType = "PERCENT"
-	CellNumberFormatTypeCurrency    CellNumberFormatType = "CURRENCY"
-	CellNumberFormatTypeDate        CellNumberFormatType = "DATE"
-	CellNumberFormatTypeTime        CellNumberFormatType = "TIME"
-	CellNumberFormatTypeDateTime    CellNumberFormatType = "DATE_TIME"
-	CellNumberFormatTypeScientific  CellNumberFormatType = "SCIENTIFIC"
-)
