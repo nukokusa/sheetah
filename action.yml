@@ -32,6 +32,6 @@ runs:
     - run: |
         mkdir -p /tmp/sheetah-${{ steps.set-sheetah-version.outputs.VERSION }}
         cd /tmp/sheetah-${{ steps.set-sheetah-version.outputs.VERSION }}
-        curl -sL https://github.com/nukokusa/sheetah/releases/download/${{ steps.set-sheetah-version.outputs.VERSION }}/${{ steps.set-filename.outputs.FILENAME }} | tar zxvf -
+        curl -sL https://github.com/nukokusa/sheetah/releases/download/v${{ steps.set-sheetah-version.outputs.VERSION }}/${{ steps.set-filename.outputs.FILENAME }} | tar zxvf -
         sudo install sheetah /usr/local/bin
       shell: bash
