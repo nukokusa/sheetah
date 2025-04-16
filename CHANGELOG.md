@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.0.5](https://github.com/nukokusa/sheetah/compare/v0.0.4...v0.0.5) - 2025-04-16
+- fix url by @nukokusa in https://github.com/nukokusa/sheetah/pull/9
+
 ## [v0.0.4](https://github.com/nukokusa/sheetah/compare/v0.0.3...v0.0.4) - 2025-03-24
 - switch sheets api by @nukokusa in https://github.com/nukokusa/sheetah/pull/6
 - add install action by @nukokusa in https://github.com/nukokusa/sheetah/pull/8
