@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.7](https://github.com/nukokusa/sheetah/compare/v0.0.6...v0.0.7) - 2026-09-07
+
+- update aqua packages by @nukokusa in https://github.com/nukokusa/sheetah/pull/14
+- add id_column by @nukokusa in https://github.com/nukokusa/sheetah/pull/16
+
 ## [v0.0.6](https://github.com/nukokusa/sheetah/compare/v0.0.5...v0.0.6) - 2026-09-07
 
 - enable immutable releases by @nukokusa in https://github.com/nukokusa/sheetah/pull/11
