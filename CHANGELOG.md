@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.6](https://github.com/nukokusa/sheetah/compare/v0.0.5...v0.0.6) - 2026-09-07
+
+- enable immutable releases by @nukokusa in https://github.com/nukokusa/sheetah/pull/11
+- update dependencies by @nukokusa in https://github.com/nukokusa/sheetah/pull/13
+
 ## [v0.0.5](https://github.com/nukokusa/sheetah/compare/v0.0.4...v0.0.5) - 2025-04-16
 - fix url by @nukokusa in https://github.com/nukokusa/sheetah/pull/9
 
