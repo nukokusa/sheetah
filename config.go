@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"sort"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
@@ -52,10 +54,50 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// FilterSheets returns the configured sheets whose Name is in names, kept
+// in the configuration file's original order. When names is empty, every
+// configured sheet is returned. It is an error for names to contain a name
+// that does not match any configured sheet.
+func (c *Config) FilterSheets(names []string) ([]*SheetConfig, error) {
+	if len(names) == 0 {
+		return c.Sheets, nil
+	}
+
+	want := make(map[string]bool, len(names))
+	for _, name := range names {
+		want[name] = true
+	}
+
+	var filtered []*SheetConfig
+	for _, sc := range c.Sheets {
+		if want[sc.Name] {
+			filtered = append(filtered, sc)
+			delete(want, sc.Name)
+		}
+	}
+
+	if len(want) > 0 {
+		missing := make([]string, 0, len(want))
+		for name := range want {
+			missing = append(missing, name)
+		}
+		sort.Strings(missing)
+		return nil, fmt.Errorf("sheet(s) not found in config: %s", strings.Join(missing, ", "))
+	}
+
+	return filtered, nil
+}
+
 type SheetConfig struct {
 	Name    string          `yaml:"name"`
 	Range   string          `yaml:"range,omitempty"`
 	Columns []*ColumnConfig `yaml:"columns"`
+	// IDColumn optionally names one of Columns whose value identifies the
+	// row. When set, a row whose IDColumn value is the zero value for its
+	// column type (0, "", false, a zero time, or the value is missing or
+	// doesn't match the column type) is excluded from the output, and
+	// output rows are sorted in ascending order by this column's value.
+	IDColumn string `yaml:"id_column,omitempty"`
 }
 
 var (
@@ -80,6 +122,18 @@ func (sc *SheetConfig) Validate() error {
 			return err
 		}
 	}
+	if sc.IDColumn != "" {
+		found := false
+		for _, cc := range sc.Columns {
+			if cc.Name == sc.IDColumn {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("id_column not found in columns: %s", sc.IDColumn)
+		}
+	}
 
 	return nil
 }
@@ -87,6 +141,11 @@ func (sc *SheetConfig) Validate() error {
 type ColumnConfig struct {
 	Name string     `yaml:"name"`
 	Type ColumnType `yaml:"type"`
+	// Format is a Go reference-time layout (e.g. "2006-01-02" or
+	// time.RFC3339) used to render a timestamp column's value in the
+	// output. Only valid when Type is "timestamp"; when omitted, the
+	// value is output as a plain RFC 3339 timestamp.
+	Format string `yaml:"format,omitempty"`
 }
 
 func (cc *ColumnConfig) Validate() error {
@@ -98,6 +157,9 @@ func (cc *ColumnConfig) Validate() error {
 	}
 	if err := cc.Type.Validate(); err != nil {
 		return err
+	}
+	if cc.Format != "" && cc.Type != ColumnTypeTimestamp {
+		return fmt.Errorf("format is only valid for timestamp columns: %s", cc.Name)
 	}
 
 	return nil

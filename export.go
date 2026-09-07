@@ -6,9 +6,10 @@ import (
 )
 
 type ExportOption struct {
-	SpreadsheetID string `help:"Spreadsheet ID" required:"" name:"id" env:"SHEETAH_SPREADSHEET_ID"`
-	Format        string `help:"Export format [yaml,json]" default:"yaml" enum:"yaml,json"`
-	Dir           string `help:"Export directory" type:"path" default:"."`
+	SpreadsheetID string   `help:"Spreadsheet ID" required:"" name:"id" env:"SHEETAH_SPREADSHEET_ID"`
+	Format        string   `help:"Export format [yaml,json]" default:"yaml" enum:"yaml,json"`
+	Dir           string   `help:"Export directory" type:"path" default:"."`
+	Sheets        []string `help:"Sheet names (matching a SheetConfig name) to export; exports every configured sheet when omitted" name:"sheets"`
 }
 
 func (o *ExportOption) Validate() error {
@@ -26,12 +27,17 @@ func (c *CLI) runExport(ctx context.Context, opt *ExportOption) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	sheetConfigs, err := config.FilterSheets(opt.Sheets)
+	if err != nil {
+		return fmt.Errorf("invalid sheets: %w", err)
+	}
+
 	fetcher, err := NewFetcher(ctx, c.Credential)
 	if err != nil {
 		return fmt.Errorf("failed to create fetcher: %w", err)
 	}
 
-	sheets, err := fetcher.FetchSheets(ctx, opt.SpreadsheetID, config.Sheets)
+	sheets, err := fetcher.FetchSheets(ctx, opt.SpreadsheetID, sheetConfigs)
 	if err != nil {
 		return fmt.Errorf("failed to fetch sheets: %w", err)
 	}
